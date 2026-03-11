@@ -6,7 +6,7 @@ A provider for the [Vercel AI SDK](https://ai-sdk.dev) that enables integration 
 
 [![npm version](https://badge.fury.io/js/digitalocean-ai-provider.svg)](https://badge.fury.io/js/digitalocean-ai-provider)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: Apache-2.0](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
