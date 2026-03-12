@@ -1,8 +1,10 @@
 node_modules/
 dist/
+coverage/
 .env
 .env.local
 *.log
 .DS_Store
 .vscode/settings.json
 .vscode/mcp.json
+package-lock.json

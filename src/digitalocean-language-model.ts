@@ -8,14 +8,7 @@ import {
   LanguageModelV2CallWarning,
   APICallError,
 } from '@ai-sdk/provider';
-import {
-  combineHeaders,
-  createJsonResponseHandler,
-  createJsonStreamResponseHandler,
-  postJsonToApi,
-  ParseResult,
-} from '@ai-sdk/provider-utils';
-import { z } from 'zod';
+import { combineHeaders } from '@ai-sdk/provider-utils';
 import {
   DigitalOceanConfig,
   DigitalOceanLanguageModelSettings,
@@ -23,14 +16,9 @@ import {
 import {
   DigitalOceanChatCompletionRequest,
   DigitalOceanChatCompletionResponse,
-  DigitalOceanStreamChunk,
   DigitalOceanFunction,
 } from './digitalocean-types';
 import { convertToDigitalOceanMessages } from './message-converter';
-
-// Simple response schemas
-const digitalOceanResponseSchema = z.any();
-const digitalOceanStreamSchema = z.any();
 
 export class DigitalOceanLanguageModel implements LanguageModelV2 {
   public readonly specificationVersion = 'v2' as const;
@@ -65,49 +53,6 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
     }
   }
 
-  private convertZodSchemaToJsonSchema(schema: any): any {
-    // Basic Zod to JSON Schema conversion
-    // For production, consider using a proper Zod to JSON Schema converter
-    if (schema && schema._def) {
-      const def = schema._def;
-      
-      if (def.typeName === 'ZodObject') {
-        const properties: any = {};
-        const required: string[] = [];
-        
-        for (const [key, value] of Object.entries(def.shape || {})) {
-          const fieldSchema = value as any;
-          properties[key] = this.convertZodSchemaToJsonSchema(fieldSchema);
-          
-          if (!fieldSchema._def.isOptional) {
-            required.push(key);
-          }
-        }
-        
-        return {
-          type: 'object',
-          properties,
-          required: required.length > 0 ? required : undefined,
-        };
-      } else if (def.typeName === 'ZodString') {
-        return { type: 'string', description: def.description };
-      } else if (def.typeName === 'ZodNumber') {
-        return { type: 'number', description: def.description };
-      } else if (def.typeName === 'ZodBoolean') {
-        return { type: 'boolean', description: def.description };
-      } else if (def.typeName === 'ZodArray') {
-        return {
-          type: 'array',
-          items: this.convertZodSchemaToJsonSchema(def.type),
-          description: def.description,
-        };
-      }
-    }
-    
-    // Fallback
-    return { type: 'string' };
-  }
-
   private getArgs(options: LanguageModelV2CallOptions): {
     args: DigitalOceanChatCompletionRequest;
     warnings: LanguageModelV2CallWarning[];
@@ -131,33 +76,36 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
         function: DigitalOceanFunction;
       }> = [];
       
-      for (const [toolName, tool] of Object.entries(options.tools)) {
-        const toolSpec = tool as any;
-        tools.push({
-          type: 'function' as const,
-          function: {
-            name: toolName,
-            description: toolSpec.description || '',
-            parameters: toolSpec.inputSchema ? this.convertZodSchemaToJsonSchema(toolSpec.inputSchema) : {
-              type: 'object',
-              properties: {},
+      for (const tool of options.tools) {
+        if (tool.type === 'function') {
+          tools.push({
+            type: 'function' as const,
+            function: {
+              name: tool.name,
+              description: tool.description || '',
+              parameters: (tool.inputSchema as DigitalOceanFunction['parameters']) ?? {
+                type: 'object',
+                properties: {},
+              },
             },
-          },
-        });
+          });
+        }
       }
-      args.tools = tools;
+      if (tools.length > 0) {
+        args.tools = tools;
+      }
     }
 
     // Handle tool choice
     if (options.toolChoice !== undefined) {
-      const toolChoice = options.toolChoice as any;
-      if (toolChoice === 'auto') {
+      const toolChoice = options.toolChoice;
+      if (toolChoice.type === 'auto') {
         args.tool_choice = 'auto';
-      } else if (toolChoice === 'none') {
+      } else if (toolChoice.type === 'none') {
         args.tool_choice = 'none';
-      } else if (toolChoice === 'required') {
+      } else if (toolChoice.type === 'required') {
         args.tool_choice = 'required';
-      } else if (typeof toolChoice === 'object' && toolChoice.type === 'tool') {
+      } else if (toolChoice.type === 'tool') {
         args.tool_choice = {
           type: 'function',
           function: { name: toolChoice.toolName },
