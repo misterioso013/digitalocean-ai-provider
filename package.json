@@ -1,6 +1,6 @@
 {
   "name": "digitalocean-ai-provider",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DigitalOcean AI Provider for the Vercel AI SDK - Integrate with DigitalOcean's Gradient AI Platform agents",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
