@@ -45,7 +45,7 @@ describe('DigitalOcean AI Provider - Advanced Features', () => {
       expect(model).toBeDefined();
       expect(typeof model.doGenerate).toBe('function');
       expect(typeof model.doStream).toBe('function');
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
     });
   });
 
@@ -166,7 +166,7 @@ describe('DigitalOcean AI Provider - Advanced Features', () => {
 
       const model = provider(mockAgentEndpoint);
       expect(typeof model.doStream).toBe('function');
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
     });
   });
 

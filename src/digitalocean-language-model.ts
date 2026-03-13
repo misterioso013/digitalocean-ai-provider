@@ -1,11 +1,13 @@
 import {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2Content,
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
-  LanguageModelV2CallWarning,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3Content,
+  LanguageModelV3FinishReason,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
+  LanguageModelV3GenerateResult,
+  LanguageModelV3StreamResult,
+  SharedV3Warning,
   APICallError,
 } from '@ai-sdk/provider';
 import { combineHeaders } from '@ai-sdk/provider-utils';
@@ -20,8 +22,8 @@ import {
 } from './digitalocean-types';
 import { convertToDigitalOceanMessages } from './message-converter';
 
-export class DigitalOceanLanguageModel implements LanguageModelV2 {
-  public readonly specificationVersion = 'v2' as const;
+export class DigitalOceanLanguageModel implements LanguageModelV3 {
+  public readonly specificationVersion = 'v3' as const;
   public readonly modelId: string;
   public readonly provider: string;
   
@@ -43,21 +45,22 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
     return {};
   }
 
-  private mapFinishReason(finishReason: string | null): LanguageModelV2FinishReason {
+  private mapFinishReason(finishReason: string | null): LanguageModelV3FinishReason {
+    const raw = finishReason ?? undefined;
     switch (finishReason) {
-      case 'stop': return 'stop';
-      case 'length': return 'length';
-      case 'content_filter': return 'content-filter';
-      case 'tool_calls': return 'tool-calls';
-      default: return 'unknown';
+      case 'stop': return { unified: 'stop', raw };
+      case 'length': return { unified: 'length', raw };
+      case 'content_filter': return { unified: 'content-filter', raw };
+      case 'tool_calls': return { unified: 'tool-calls', raw };
+      default: return { unified: 'other', raw };
     }
   }
 
-  private getArgs(options: LanguageModelV2CallOptions): {
+  private getArgs(options: LanguageModelV3CallOptions): {
     args: DigitalOceanChatCompletionRequest;
-    warnings: LanguageModelV2CallWarning[];
+    warnings: SharedV3Warning[];
   } {
-    const warnings: LanguageModelV2CallWarning[] = [];
+    const warnings: SharedV3Warning[] = [];
     const messages = convertToDigitalOceanMessages(options.prompt ?? []);
 
     // Build request args with tool support
@@ -142,15 +145,8 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
   }
 
   public async doGenerate(
-    options: LanguageModelV2CallOptions
-  ): Promise<{
-    content: LanguageModelV2Content[];
-    finishReason: LanguageModelV2FinishReason;
-    usage: LanguageModelV2Usage;
-    warnings: LanguageModelV2CallWarning[];
-    request?: { body: string };
-    response?: { body: DigitalOceanChatCompletionResponse };
-  }> {
+    options: LanguageModelV3CallOptions
+  ): Promise<LanguageModelV3GenerateResult> {
     const { args, warnings } = this.getArgs(options);
 
     let response: Response;
@@ -194,7 +190,7 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
       throw new Error('No message in response from DigitalOcean API');
     }
 
-    const content: LanguageModelV2Content[] = [];
+    const content: LanguageModelV3Content[] = [];
 
     // Add text content if present
     if (firstChoice.message.content) {
@@ -221,50 +217,37 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
       throw new Error('No content or tool calls in response from DigitalOcean API');
     }
     
-    const timestamp = Math.floor(Date.now() / 1000);
     const usage = responseData.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
     return {
       content,
       finishReason: this.mapFinishReason(firstChoice.finish_reason || null),
       usage: {
-        inputTokens: usage.prompt_tokens,
-        outputTokens: usage.completion_tokens,
-        totalTokens: usage.total_tokens,
+        inputTokens: {
+          total: usage.prompt_tokens,
+          noCache: undefined,
+          cacheRead: undefined,
+          cacheWrite: undefined,
+        },
+        outputTokens: {
+          total: usage.completion_tokens,
+          text: undefined,
+          reasoning: undefined,
+        },
       },
       warnings,
-      request: { body: JSON.stringify(args) },
+      request: { body: args },
       response: {
-        body: {
-          id: 'do-' + timestamp,
-          object: 'chat.completion',
-          created: timestamp,
-          model: this.modelId,
-          choices: responseData.choices?.map((choice: any, index: number) => ({
-            index,
-            message: {
-              role: 'assistant' as const,
-              content: choice.message.content,
-              tool_calls: choice.message.tool_calls,
-            },
-            finish_reason: choice.finish_reason,
-          })) || [],
-          usage: {
-            prompt_tokens: usage.prompt_tokens,
-            completion_tokens: usage.completion_tokens,
-            total_tokens: usage.total_tokens,
-          },
-        },
+        id: responseData.id,
+        modelId: responseData.model ?? this.modelId,
+        timestamp: new Date(),
       },
     };
   }
 
   public async doStream(
-    options: LanguageModelV2CallOptions
-  ): Promise<{
-    stream: ReadableStream<LanguageModelV2StreamPart>;
-    warnings?: LanguageModelV2CallWarning[];
-  }> {
+    options: LanguageModelV3CallOptions
+  ): Promise<LanguageModelV3StreamResult> {
     const { args, warnings } = this.getArgs(options);
 
     const streamingArgs: DigitalOceanChatCompletionRequest = {
@@ -306,19 +289,22 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
       });
     }
 
-    let finishReason: LanguageModelV2FinishReason = 'unknown';
-    let usage: LanguageModelV2Usage = {
-      inputTokens: undefined,
-      outputTokens: undefined,
-      totalTokens: undefined,
+    let finishReason: LanguageModelV3FinishReason = { unified: 'other', raw: undefined };
+    let usage: LanguageModelV3Usage = {
+      inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
     };
 
+    // State for text block lifecycle
+    let inTextBlock = false;
+    const textBlockId = 'text-0';
+    // Track started tool IDs for tool-input-end
+    const startedToolIds = new Set<string>();
+
     const decoder = new TextDecoder();
-    const transformStream = new TransformStream<Uint8Array, LanguageModelV2StreamPart>({
+    const transformStream = new TransformStream<Uint8Array, LanguageModelV3StreamPart>({
       start: (controller) => {
-        if (warnings.length > 0) {
-          controller.enqueue({ type: 'stream-start', warnings });
-        }
+        controller.enqueue({ type: 'stream-start', warnings });
       },
 
       transform: (chunk, controller) => {
@@ -334,56 +320,81 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
             try {
               const jsonData = JSON.parse(jsonString);
               const choice = jsonData.choices?.[0];
-              
+
               if (!choice) continue;
 
               // Handle text content
               if (choice.delta?.content) {
+                if (!inTextBlock) {
+                  inTextBlock = true;
+                  controller.enqueue({ type: 'text-start', id: textBlockId });
+                }
                 controller.enqueue({
                   type: 'text-delta',
-                  id: '0',
+                  id: textBlockId,
                   delta: choice.delta.content,
                 });
               }
 
               // Handle tool calls
               if (choice.delta?.tool_calls) {
+                // Close any open text block before tool calls
+                if (inTextBlock) {
+                  inTextBlock = false;
+                  controller.enqueue({ type: 'text-end', id: textBlockId });
+                }
                 for (const toolCall of choice.delta.tool_calls) {
+                  const toolId = toolCall.id || `tool-${Date.now()}`;
                   if (toolCall.function?.name) {
-                    // Tool call start
+                    startedToolIds.add(toolId);
                     controller.enqueue({
                       type: 'tool-input-start',
-                      id: toolCall.id || `tool-${Date.now()}`,
+                      id: toolId,
                       toolName: toolCall.function.name,
                     });
                   }
-                  
                   if (toolCall.function?.arguments) {
-                    // Tool call arguments delta
                     controller.enqueue({
                       type: 'tool-input-delta',
-                      id: toolCall.id || `tool-${Date.now()}`,
+                      id: toolId,
                       delta: toolCall.function.arguments,
                     });
                   }
                 }
               }
 
+              // Emit response-metadata from first chunk that has an id
+              if (jsonData.id && !jsonData._metadataEmitted) {
+                jsonData._metadataEmitted = true;
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: jsonData.id,
+                  modelId: jsonData.model ?? this.modelId,
+                  timestamp: new Date(jsonData.created * 1000),
+                });
+              }
+
               // Handle finish reason and usage
               if (choice.finish_reason) {
                 finishReason = this.mapFinishReason(choice.finish_reason);
-                
+
                 if (jsonData.usage) {
                   usage = {
-                    inputTokens: jsonData.usage.prompt_tokens,
-                    outputTokens: jsonData.usage.completion_tokens,
-                    totalTokens: jsonData.usage.total_tokens,
+                    inputTokens: {
+                      total: jsonData.usage.prompt_tokens,
+                      noCache: undefined,
+                      cacheRead: undefined,
+                      cacheWrite: undefined,
+                    },
+                    outputTokens: {
+                      total: jsonData.usage.completion_tokens,
+                      text: undefined,
+                      reasoning: undefined,
+                    },
                   };
                 }
               }
             } catch (parseError) {
-              // Skip malformed JSON chunks - they're often incomplete streaming data
-              // In production, you may want to log this for debugging
               const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
               console.warn('Failed to parse streaming chunk:', errorMessage);
               continue;
@@ -393,6 +404,14 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
       },
 
       flush: (controller) => {
+        // Close any open text block
+        if (inTextBlock) {
+          controller.enqueue({ type: 'text-end', id: textBlockId });
+        }
+        // Close any open tool input blocks
+        for (const toolId of startedToolIds) {
+          controller.enqueue({ type: 'tool-input-end', id: toolId });
+        }
         controller.enqueue({
           type: 'finish',
           finishReason,
@@ -403,7 +422,7 @@ export class DigitalOceanLanguageModel implements LanguageModelV2 {
 
     return {
       stream: response.body.pipeThrough(transformStream),
-      warnings,
+      request: { body: streamingArgs },
     };
   }
 }

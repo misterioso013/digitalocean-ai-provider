@@ -1,6 +1,6 @@
 import {
-  LanguageModelV2,
-  ProviderV2,
+  LanguageModelV3,
+  ProviderV3,
   NoSuchModelError,
 } from '@ai-sdk/provider';
 import {
@@ -17,11 +17,11 @@ import {
 /**
  * DigitalOcean provider interface extending ProviderV2
  */
-export interface DigitalOceanProvider extends ProviderV2 {
+export interface DigitalOceanProvider extends ProviderV3 {
   (
     agentEndpoint: string,
     settings?: DigitalOceanLanguageModelSettings,
-  ): LanguageModelV2;
+  ): LanguageModelV3;
 
   /**
    * Creates a DigitalOcean language model from an agent endpoint.
@@ -29,7 +29,7 @@ export interface DigitalOceanProvider extends ProviderV2 {
   languageModel(
     agentEndpoint: string,
     settings?: DigitalOceanLanguageModelSettings,
-  ): LanguageModelV2;
+  ): LanguageModelV3;
 
   /**
    * Creates a DigitalOcean chat model from an agent endpoint.
@@ -37,7 +37,7 @@ export interface DigitalOceanProvider extends ProviderV2 {
   chat(
     agentEndpoint: string,
     settings?: DigitalOceanLanguageModelSettings,
-  ): LanguageModelV2;
+  ): LanguageModelV3;
 }
 
 /**
@@ -127,20 +127,30 @@ export function createDigitalOcean(
   provider.textEmbeddingModel = (modelId: string) => {
     throw new NoSuchModelError({
       modelId,
-      modelType: 'textEmbeddingModel',
+      modelType: 'embeddingModel',
       message: 'Text embedding models are not supported by DigitalOcean AI provider',
+    });
+  };
+
+  provider.embeddingModel = (modelId: string) => {
+    throw new NoSuchModelError({
+      modelId,
+      modelType: 'embeddingModel',
+      message: 'Embedding models are not supported by DigitalOcean AI provider',
     });
   };
 
   provider.imageModel = (modelId: string) => {
     throw new NoSuchModelError({
       modelId,
-      modelType: 'imageModel', 
+      modelType: 'imageModel',
       message: 'Image models are not supported by DigitalOcean AI provider',
     });
   };
 
-  return provider as DigitalOceanProvider;
+  (provider as any).specificationVersion = 'v3';
+
+  return provider as unknown as DigitalOceanProvider;
 }
 
 /**

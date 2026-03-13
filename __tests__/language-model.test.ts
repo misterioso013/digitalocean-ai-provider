@@ -1,11 +1,11 @@
 import { createDigitalOcean } from '../src';
-import { LanguageModelV2CallOptions } from '@ai-sdk/provider';
+import { LanguageModelV3CallOptions } from '@ai-sdk/provider';
 
 describe('DigitalOceanLanguageModel', () => {
   const mockApiKey = 'test-api-key';
   const mockAgentEndpoint = 'https://test-agent.agents.do-ai.run';
 
-  const baseCallOptions: LanguageModelV2CallOptions = {
+  const baseCallOptions: LanguageModelV3CallOptions = {
     prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
   };
 
@@ -29,9 +29,9 @@ describe('DigitalOceanLanguageModel', () => {
     });
 
   describe('basic properties', () => {
-    it('has specificationVersion v2', () => {
+    it('has specificationVersion v3', () => {
       const model = makeModelWithFetch(jest.fn());
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
     });
 
     it('has provider set to digitalocean', () => {
@@ -58,8 +58,11 @@ describe('DigitalOceanLanguageModel', () => {
       const result = await model.doGenerate(baseCallOptions);
 
       expect(result.content).toEqual([{ type: 'text', text: 'Hello!' }]);
-      expect(result.finishReason).toBe('stop');
-      expect(result.usage).toEqual({ inputTokens: 5, outputTokens: 3, totalTokens: 8 });
+      expect(result.finishReason).toEqual({ unified: 'stop', raw: 'stop' });
+      expect(result.usage).toEqual({
+        inputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 3, text: undefined, reasoning: undefined },
+      });
     });
 
     it('returns tool-call content when tool_calls are present', async () => {
@@ -93,7 +96,7 @@ describe('DigitalOceanLanguageModel', () => {
       expect(result.content).toEqual([
         { type: 'tool-call', toolCallId: 'call_1', toolName: 'get_weather', input: '{"city":"Paris"}' },
       ]);
-      expect(result.finishReason).toBe('tool-calls');
+      expect(result.finishReason).toEqual({ unified: 'tool-calls', raw: 'tool_calls' });
     });
 
     it('maps finish reason "length"', async () => {
@@ -101,7 +104,7 @@ describe('DigitalOceanLanguageModel', () => {
       const model = makeModelWithFetch(mockFetch);
 
       const result = await model.doGenerate(baseCallOptions);
-      expect(result.finishReason).toBe('length');
+      expect(result.finishReason).toEqual({ unified: 'length', raw: 'length' });
     });
 
     it('maps finish reason "content_filter"', async () => {
@@ -109,7 +112,7 @@ describe('DigitalOceanLanguageModel', () => {
       const model = makeModelWithFetch(mockFetch);
 
       const result = await model.doGenerate(baseCallOptions);
-      expect(result.finishReason).toBe('content-filter');
+      expect(result.finishReason).toEqual({ unified: 'content-filter', raw: 'content_filter' });
     });
 
     it('maps null finish reason to "unknown"', async () => {
@@ -128,7 +131,7 @@ describe('DigitalOceanLanguageModel', () => {
 
       const model = makeModelWithFetch(mockFetch);
       const result = await model.doGenerate(baseCallOptions);
-      expect(result.finishReason).toBe('unknown');
+      expect(result.finishReason).toEqual({ unified: 'other', raw: undefined });
     });
 
     it('throws when response is not ok', async () => {
@@ -203,7 +206,10 @@ describe('DigitalOceanLanguageModel', () => {
 
       const model = makeModelWithFetch(mockFetch);
       const result = await model.doGenerate(baseCallOptions);
-      expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+      expect(result.usage).toEqual({
+        inputTokens: { total: 0, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 0, text: undefined, reasoning: undefined },
+      });
     });
 
     it('passes maxOutputTokens to request', async () => {
@@ -423,8 +429,8 @@ describe('DigitalOceanLanguageModel', () => {
       const result = await model.doGenerate(baseCallOptions);
 
       expect(result.request?.body).toBeDefined();
-      const parsedBody = JSON.parse(result.request!.body as string);
-      expect(parsedBody.messages).toBeDefined();
+      const body = result.request!.body as any;
+      expect(body.messages).toBeDefined();
     });
 
     it('skips provider-defined tools (non-function)', async () => {
@@ -495,8 +501,11 @@ describe('DigitalOceanLanguageModel', () => {
 
       const finishParts = parts.filter((p) => p.type === 'finish');
       expect(finishParts).toHaveLength(1);
-      expect(finishParts[0].finishReason).toBe('stop');
-      expect(finishParts[0].usage).toEqual({ inputTokens: 5, outputTokens: 2, totalTokens: 7 });
+      expect(finishParts[0].finishReason).toEqual({ unified: 'stop', raw: 'stop' });
+      expect(finishParts[0].usage).toEqual({
+        inputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 2, text: undefined, reasoning: undefined },
+      });
     });
 
     it('handles tool_calls in streaming response', async () => {

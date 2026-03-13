@@ -1,6 +1,5 @@
 import {
-  LanguageModelV2Prompt,
-  LanguageModelV2CallWarning,
+  LanguageModelV3Prompt,
   UnsupportedFunctionalityError,
 } from '@ai-sdk/provider';
 import { DigitalOceanMessage, DigitalOceanToolCall } from './digitalocean-types';
@@ -9,7 +8,7 @@ import { DigitalOceanMessage, DigitalOceanToolCall } from './digitalocean-types'
  * Convert AI SDK prompt to DigitalOcean agent message format
  */
 export function convertToDigitalOceanMessages(
-  prompt: LanguageModelV2Prompt,
+  prompt: LanguageModelV3Prompt,
 ): DigitalOceanMessage[] {
   const messages: DigitalOceanMessage[] = [];
 
@@ -75,13 +74,13 @@ export function convertToDigitalOceanMessages(
             
             case 'tool-call':
               // Convert AI SDK tool call to DigitalOcean format
-              const toolCallPart = part as any;
+              // V3: tool call has input: unknown (not args string)
               toolCalls.push({
-                id: toolCallPart.toolCallId,
+                id: part.toolCallId,
                 type: 'function',
                 function: {
-                  name: toolCallPart.toolName,
-                  arguments: toolCallPart.args || '{}',
+                  name: part.toolName,
+                  arguments: JSON.stringify(part.input ?? {}),
                 },
               });
               break;
@@ -113,26 +112,30 @@ export function convertToDigitalOceanMessages(
 
       case 'tool':
         // Convert tool result to DigitalOcean format
-        // Tool messages have a different structure in v2
-        const toolMessage = message as any;
-        
-        // For tool messages, we need to extract the result from the content array
-        let toolResult = '';
-        if (Array.isArray(toolMessage.content)) {
-          for (const part of toolMessage.content) {
-            if (part.type === 'tool-result') {
-              toolResult = JSON.stringify(part.result);
-              break;
-            }
+        // V3: tool result parts have output: LanguageModelV3ToolResultOutput (typed union)
+        for (const part of message.content) {
+          if (part.type !== 'tool-result') continue;
+          let toolResult: string;
+          const output = part.output;
+          if (!output) {
+            toolResult = '';
+          } else if (output.type === 'text' || output.type === 'error-text') {
+            toolResult = output.value;
+          } else if (output.type === 'json' || output.type === 'error-json') {
+            toolResult = JSON.stringify(output.value);
+          } else if (output.type === 'execution-denied') {
+            toolResult = (output as any).reason ?? 'execution denied';
+          } else {
+            // 'content'
+            toolResult = JSON.stringify((output as any).value);
           }
+          messages.push({
+            role: 'tool',
+            tool_call_id: part.toolCallId || '',
+            name: part.toolName || '',
+            content: toolResult,
+          });
         }
-
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolMessage.toolCallId || '',
-          name: toolMessage.toolName || '',
-          content: toolResult,
-        });
         break;
 
       default:

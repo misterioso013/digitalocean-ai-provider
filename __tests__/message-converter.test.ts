@@ -1,10 +1,10 @@
 import { convertToDigitalOceanMessages } from '../src/message-converter';
-import { LanguageModelV2Prompt } from '@ai-sdk/provider';
+import { LanguageModelV3Prompt } from '@ai-sdk/provider';
 
 describe('Message Converter', () => {
   describe('Basic Message Conversion', () => {
     it('converts simple text messages', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
         { role: 'assistant', content: [{ type: 'text', text: 'Hi there!' }] },
       ];
@@ -18,7 +18,7 @@ describe('Message Converter', () => {
     });
 
     it('converts system messages', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         { role: 'system', content: 'You are a helpful assistant' },
         { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
       ];
@@ -34,13 +34,13 @@ describe('Message Converter', () => {
 
   describe('Edge Cases', () => {
     it('handles empty messages array', () => {
-      const prompt: LanguageModelV2Prompt = [];
+      const prompt: LanguageModelV3Prompt = [];
       const converted = convertToDigitalOceanMessages(prompt);
       expect(converted).toEqual([]);
     });
 
     it('handles messages with empty content arrays', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [],
@@ -56,7 +56,7 @@ describe('Message Converter', () => {
     });
 
     it('handles multiple text parts in one message', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -72,7 +72,7 @@ describe('Message Converter', () => {
     });
 
     it('handles unsupported content types gracefully', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -91,7 +91,7 @@ describe('Message Converter', () => {
 
   describe('Image Handling', () => {
     it('handles image part with URL', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -107,7 +107,7 @@ describe('Message Converter', () => {
     });
 
     it('handles image part with string base64', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -121,7 +121,7 @@ describe('Message Converter', () => {
     });
 
     it('handles image part with binary data', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -135,7 +135,7 @@ describe('Message Converter', () => {
     });
 
     it('skips unknown content types without image property', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'user',
           content: [
@@ -152,7 +152,7 @@ describe('Message Converter', () => {
 
   describe('Assistant Messages with Tool Calls', () => {
     it('converts assistant message with tool calls', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'assistant',
           content: [
@@ -176,7 +176,7 @@ describe('Message Converter', () => {
     });
 
     it('skips assistant message with no content and no tool calls', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'assistant',
           content: [],
@@ -188,7 +188,7 @@ describe('Message Converter', () => {
     });
 
     it('skips unsupported assistant content types', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'assistant',
           content: [
@@ -206,7 +206,7 @@ describe('Message Converter', () => {
 
   describe('Tool Messages', () => {
     it('converts tool result messages', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'tool',
           content: [
@@ -214,10 +214,10 @@ describe('Message Converter', () => {
               type: 'tool-result',
               toolCallId: 'call_1',
               toolName: 'get_weather',
-              result: { temperature: '20C', city: 'Paris' },
-            } as any,
+              output: { type: 'json', value: { temperature: '20C', city: 'Paris' } },
+            },
           ],
-        } as any,
+        },
       ];
 
       const converted = convertToDigitalOceanMessages(prompt);
@@ -227,17 +227,16 @@ describe('Message Converter', () => {
     });
 
     it('handles tool message with no content array', () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV3Prompt = [
         {
           role: 'tool',
-          content: null as any,
-        } as any,
+          content: [],
+        },
       ];
 
       const converted = convertToDigitalOceanMessages(prompt);
-      expect(converted).toHaveLength(1);
-      expect(converted[0].role).toBe('tool');
-      expect(converted[0].content).toBe('');
+      // V3: empty content array → no tool messages produced
+      expect(converted).toHaveLength(0);
     });
   });
 

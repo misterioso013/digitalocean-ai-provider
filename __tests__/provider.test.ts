@@ -1,5 +1,5 @@
 import { digitalocean, createDigitalOcean } from '../src';
-import { LanguageModelV2 } from '@ai-sdk/provider';
+import { LanguageModelV3 } from '@ai-sdk/provider';
 import { NoSuchModelError } from '@ai-sdk/provider';
 
 describe('DigitalOcean AI Provider', () => {
@@ -16,7 +16,7 @@ describe('DigitalOcean AI Provider', () => {
       const model = digitalocean(mockAgentEndpoint);
       expect(model).toBeDefined();
       expect(model.modelId).toBe(mockAgentEndpoint);
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
     });
 
     it('creates a custom provider instance', () => {
@@ -41,7 +41,7 @@ describe('DigitalOcean AI Provider', () => {
 
     it('throws NoSuchModelError for textEmbeddingModel', () => {
       const provider = createDigitalOcean({ apiKey: mockApiKey });
-      expect(() => provider.textEmbeddingModel('text-embedding-3-small')).toThrow(NoSuchModelError);
+      expect(() => provider.textEmbeddingModel!('text-embedding-3-small')).toThrow(NoSuchModelError);
     });
 
     it('throws NoSuchModelError for imageModel', () => {
@@ -101,9 +101,9 @@ describe('DigitalOcean AI Provider', () => {
   });
 
   describe('Language Model', () => {
-    it('implements LanguageModelV2 interface', () => {
+    it('implements LanguageModelV3 interface', () => {
       const model = digitalocean(mockAgentEndpoint);
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
       expect(typeof model.doGenerate).toBe('function');
       expect(typeof model.doStream).toBe('function');
     });
